@@ -649,9 +649,9 @@ DROP TABLE IF EXISTS `value`;
 /*********************
 value - Description
 
-This table contains a unique list of value types that are 
-stored in the test_value and are associated with each test run.  
-The most common value type is run_time and describes the time 
+This table contains a unique list of value types that are
+stored in the test_value and are associated with each test run.
+The most common value type is run_time and describes the time
 it took for a particular product to load a page.
 **********************/
 CREATE TABLE `value` (
@@ -661,6 +661,65 @@ CREATE TABLE `value` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `name_UNIQUE` (`name`)
 ) ENGINE={engine} DEFAULT CHARSET=utf8;
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+DROP TABLE IF EXISTS `alert_reason`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+
+/*************************
+This table contains alert code strings, their associated descriptions, and
+any associated configuration data.
+**************************/
+CREATE TABLE `alert_reason` (
+    `code` varchar(128) COLLATE utf8_bin NOT NULL,
+    `description` text COLLATE utf8_bin NOT NULL,
+    `last_run` int(11) NOT NULL,
+    `config` text,
+    UNIQUE KEY `code_uni` (`code`),
+    KEY `code_key` (`code`)
+);
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+DROP TABLE IF EXISTS `alerts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+
+/*********************
+This table stores data points that could represent performance regressions.
+It functions as an email queue and performance regression alerting system.
+**********************/
+CREATE TABLE `alerts` (
+    `test_run_id` int(11) NOT NULL,
+    `product_id` int(11) NOT NULL,
+    `operating_system_id` int(11) NOT NULL,
+    `test_id` int(11) NOT NULL,
+    `page_id` int(11) NOT NULL,
+    `worker_id` int(11),
+    `processor` varchar(25) COLLATE utf8_bin NOT NULL,
+    `build_type` varchar(25) COLLATE utf8_bin NOT NULL,
+    `processed_flag` enum('ready','loading','processed') DEFAULT 'ready',
+    `error_flag` enum('N','Y') DEFAULT 'N',
+    `date_loaded` int(11) NOT NULL,
+    `reason_code` varchar(128) COLLATE utf8_bin NOT NULL,##REFERNCE TO STANDARD SET OF REASONS
+    `details` text COLLATE utf8_bin NOT NULL, ##JSON OF SPECIFIC DETAILS
+    `severity` DOUBLE NOT NULL, ##ABSTRACT SEVERITY 1.0==HIGH, 0.0==LOW
+    `confidence` DOUBLE NOT NULL, ##CONFIDENCE INTERVAL 1.0==100% CONFIDENCE
+    `solution` varchar(128) COLLATE utf8_bin NOT NULL, ##INTENT FOR HUMANS TO MARKUP THIS ALERT SO MACHINE KNOWS IF REAL, OR START ESCALATING
+    `status` tinyint(4) DEFAULT '1',
+    UNIQUE KEY `datum_uni` (`test_run_id`, `product_id`, `operating_system_id`, `test_id`, `page_id`, `processor`, `build_type`),
+    KEY `test_run_id_key` (`test_run_id`),
+    KEY `processed_flag_key` (`processed_flag`),
+    KEY `error_flag_key` (`error_flag`),
+    KEY `worker_id_key` (`worker_id`),
+    KEY `date_loaded_key` (`date_loaded`),
+    KEY `reason_code_key` (`reason_code`),
+    KEY `status_key` (`status`),
+    FOREIGN KEY alert_reason_fk (reason_code) REFERENCES alert_reason(code)
+);
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -694,6 +753,7 @@ CREATE TABLE `test_data_all_dimensions` (
   `trend_std` double DEFAULT NULL,
   `test_evaluation` tinyint(4) DEFAULT NULL,
   `status` tinyint(4) DEFAULT '1',
+  UNIQUE KEY `datum_uni` (`test_run_id`, `product_id`, `operating_system_id`, `test_id`, `page_id`, `processor`, `build_type`),
   KEY `test_run_id_key` (`test_run_id`),
   KEY `date_received_key` (`date_received`),
   KEY `product_id_key` (`product_id`),
