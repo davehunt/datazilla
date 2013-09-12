@@ -17,3 +17,6 @@ class AlertsModel(DatazillaModelBase):
         super(AlertsModel, self).__init__(project)
 
 
+    def insert_alert(self, data):
+        pass
+
