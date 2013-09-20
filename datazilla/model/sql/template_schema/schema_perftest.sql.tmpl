@@ -34,7 +34,7 @@ A table used for logging critical messages from applications.
 ************/
 CREATE TABLE `application_log` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `revision` varchar(16) NULL,
+  `revision` varchar(50) NULL,
   `test_run_id` int(11) NULL,
   `msg_type` varchar(50) NULL,
   `msg` mediumtext NULL,
@@ -96,7 +96,7 @@ CREATE TABLE `build` (
   `product_id` int(11) NOT NULL,
   `test_build_id` varchar(16) NOT NULL,
   `processor` varchar(25) NOT NULL,
-  `revision` varchar(16) NOT NULL,
+  `revision` varchar(50) NOT NULL,
   `build_type` varchar(25) NOT NULL,
   `build_date` int(11) NOT NULL,
   PRIMARY KEY (`id`),
@@ -550,7 +550,7 @@ CREATE TABLE `test_run` (
   `test_id` int(11) NOT NULL,
   `build_id` int(11) NOT NULL,
   `machine_id` int(11) NOT NULL,
-  `revision` varchar(16) NOT NULL,
+  `revision` varchar(50) NOT NULL,
   `date_run` int(11) NOT NULL,
   `status` tinyint(4) NOT NULL DEFAULT 1,
   PRIMARY KEY (`id`),
@@ -620,7 +620,7 @@ CREATE TABLE `metric_threshold` (
   `test_id` int(11) NOT NULL,
   `page_id` int(11) NOT NULL,
   `test_run_id` int(11) NOT NULL,
-  `revision` varchar(16) NOT NULL,
+  `revision` varchar(50) NOT NULL,
   KEY `product_id_key` (`product_id`),
   KEY `operating_system_id_key` (`operating_system_id`),
   KEY `processor_key` (`processor`),
@@ -675,11 +675,11 @@ any associated configuration data.
 CREATE TABLE `alert_reason` (
     `code` varchar(128) COLLATE utf8_bin NOT NULL,
     `description` text COLLATE utf8_bin NOT NULL,
-    `last_run` int(11) NOT NULL,
-    `config` text,
+    `config` mediumtext,
     UNIQUE KEY `code_uni` (`code`),
     KEY `code_key` (`code`)
-);
+) ENGINE={engine} DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
@@ -692,36 +692,66 @@ This table stores data points that could represent performance regressions.
 It functions as an email queue and performance regression alerting system.
 **********************/
 CREATE TABLE `alerts` (
-    `test_run_id` int(11) NOT NULL,
-    `product_id` int(11) NOT NULL,
-    `operating_system_id` int(11) NOT NULL,
-    `test_id` int(11) NOT NULL,
-    `page_id` int(11) NOT NULL,
+    `id` int(11) NOT NULL AUTO_INCREMENT,
     `worker_id` int(11),
-    `processor` varchar(25) COLLATE utf8_bin NOT NULL,
-    `build_type` varchar(25) COLLATE utf8_bin NOT NULL,
-    `processed_flag` enum('ready','loading','processed') DEFAULT 'ready',
+    `processed_flag` enum('ready','loading','onhold', 'processed') DEFAULT 'ready',
     `error_flag` enum('N','Y') DEFAULT 'N',
+    `error_msg` mediumtext,
     `date_loaded` int(11) NOT NULL,
+    `date_processed` int(11) NOT NULL,
     `reason_code` varchar(128) COLLATE utf8_bin NOT NULL,##REFERNCE TO STANDARD SET OF REASONS
     `details` text COLLATE utf8_bin NOT NULL, ##JSON OF SPECIFIC DETAILS
+    `message_body` text COLLATE utf8_bin NOT NULL, ##JSON OF SPECIFIC DETAILS
     `severity` DOUBLE NOT NULL, ##ABSTRACT SEVERITY 1.0==HIGH, 0.0==LOW
     `confidence` DOUBLE NOT NULL, ##CONFIDENCE INTERVAL 1.0==100% CONFIDENCE
     `solution` varchar(128) COLLATE utf8_bin NOT NULL, ##INTENT FOR HUMANS TO MARKUP THIS ALERT SO MACHINE KNOWS IF REAL, OR START ESCALATING
     `status` tinyint(4) DEFAULT '1',
-    UNIQUE KEY `datum_uni` (`test_run_id`, `product_id`, `operating_system_id`, `test_id`, `page_id`, `processor`, `build_type`),
-    KEY `test_run_id_key` (`test_run_id`),
+    PRIMARY KEY (`id`),
+    KEY `worker_id_key` (`worker_id`),
     KEY `processed_flag_key` (`processed_flag`),
     KEY `error_flag_key` (`error_flag`),
-    KEY `worker_id_key` (`worker_id`),
     KEY `date_loaded_key` (`date_loaded`),
+    KEY `date_processed_key` (`date_loaded`),
     KEY `reason_code_key` (`reason_code`),
     KEY `status_key` (`status`),
     FOREIGN KEY alert_reason_fk (reason_code) REFERENCES alert_reason(code)
-);
+
+) ENGINE={engine} DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
 
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+DROP TABLE IF EXISTS `revision_summary`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+
+CREATE TABLE `revision_summary` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `product_id` int(11) NOT NULL,
+    `revision` varchar(50) COLLATE utf8_bin DEFAULT NULL,
+    `percent_pass` double,
+    `total_objects` double,
+    `total_pass` double,
+    `total_fail` double,
+    `push_id` int(11),
+    `push_date` int(11),
+    `last_update` int(11),
+    `json_summary` blob,
+    PRIMARY KEY (`id`),
+    KEY `product_id_key` (`product_id`),
+    KEY `revision_key` (`revision`),
+    KEY `push_id_key` (`push_id`),
+    KEY `push_date_key` (`push_date`),
+    KEY `last_update_key` (`last_update`),
+    FOREIGN KEY product_id_fk (product_id) REFERENCES product (id)
+) ENGINE={engine} DEFAULT CHARSET=utf8 COLLATE=utf8_bin;
+
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
+DROP TABLE IF EXISTS `test_data_all_dimensions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
 
 CREATE TABLE `test_data_all_dimensions` (
   `test_run_id` int(11) NOT NULL,
@@ -730,7 +760,7 @@ CREATE TABLE `test_data_all_dimensions` (
   `test_id` int(11) NOT NULL,
   `page_id` int(11) NOT NULL,
   `date_received` int(11) unsigned NOT NULL,
-  `revision` varchar(16) COLLATE utf8_bin DEFAULT NULL,
+  `revision` varchar(50) COLLATE utf8_bin DEFAULT NULL,
   `product` varchar(50) COLLATE utf8_bin NOT NULL,
   `branch` varchar(128) COLLATE utf8_bin NOT NULL,
   `branch_version` varchar(16) COLLATE utf8_bin DEFAULT NULL,

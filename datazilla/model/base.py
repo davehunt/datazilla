@@ -16,8 +16,6 @@ import socket
 import zlib
 import MySQLdb
 
-from collections import defaultdict
-
 from warnings import filterwarnings, resetwarnings
 
 from django.conf import settings
@@ -31,12 +29,12 @@ from .sql.models import SQLDataSource
 class DatazillaModelBase(object):
     """Base model class for all Datazilla models"""
 
-    def __init__(self, project):
+    def __init__(self, project, procs_file_name=None):
         self.project = project
 
         self.sources = {}
         for ct in self.CONTENT_TYPES:
-            self.sources[ct] = SQLDataSource(project, ct)
+            self.sources[ct] = SQLDataSource(project, ct, procs_file_name)
 
         self.DEBUG = settings.DEBUG
 

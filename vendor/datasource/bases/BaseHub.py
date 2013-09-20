@@ -242,7 +242,6 @@ class BaseHub:
             BaseHub.procs[data_source] = dict()
 
             for file in BaseHub.data_sources[data_source]['procs']:
-
                 ##Load file##
                 proc_file_obj = open(file)
                 try:

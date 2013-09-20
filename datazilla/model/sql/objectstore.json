@@ -140,6 +140,77 @@
             "host":"master_host"
 
         }
+    },
+
+    "alerts": {
+
+        "selects":{
+            "get_claimed_summary_ids":{
+
+                "sql":"SELECT   `test_run_id`, `id`
+                        FROM     `objectstore`
+                        WHERE    `worker_id` = CONNECTION_ID()
+                        AND      `processed_flag` = 'summary_loading'
+                        AND      `error_flag` = 'N'",
+
+                "host":"master_host"
+            }
+        },
+
+        "updates":{
+            "mark_summary_ready":{
+
+                "sql":"UPDATE   `objectstore`
+                        SET      `processed_flag` = 'summary_ready'
+                        WHERE    `processed_flag` = 'processed' AND
+                                 `test_run_id` = ?  AND
+                                 `worker_id` = CONNECTION_ID()",
+
+                "host":"master_host"
+
+            },
+
+            "mark_summary_loading":{
+
+                "sql":"UPDATE `objectstore`
+                        SET    `processed_flag` = 'summary_loading',
+                                `worker_id` = CONNECTION_ID()
+                        WHERE  `processed_flag` = 'summary_ready'
+                        AND    `error_flag` = 'N'
+                        ORDER BY `id`
+                        LIMIT ?
+                        ",
+
+                "host":"master_host"
+
+            },
+
+            "mark_summary_complete":{
+
+                "sql":"UPDATE   `objectstore`
+                        SET      `processed_flag` = 'summary_complete', `test_run_id` = ?
+                        WHERE    `processed_flag` = 'summary_loading'
+                        AND      `test_run_id` = ?
+                        AND      `worker_id` = CONNECTION_ID()",
+
+                "host":"master_host"
+
+            },
+
+            "mark_summary_error":{
+
+                "sql":"UPDATE   `objectstore`
+                        SET     `processed_flag` = 'summary_ready',
+                                `worker_id` = NULL,
+                                `error_flag` = 'Y',
+                                `error_msg` = ?
+                        WHERE    `processed_flag` = 'summary_loading'
+                        AND      `test_run_id` = ?
+                        AND      `worker_id` = CONNECTION_ID()",
+
+                "host":"master_host"
+            }
+        }
     }
 }
 

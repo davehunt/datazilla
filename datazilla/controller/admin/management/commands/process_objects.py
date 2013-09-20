@@ -1,6 +1,6 @@
 from optparse import make_option
 
-from datazilla.model import PerformanceTestModel, MetricsTestModel, PushLogModel
+from datazilla.model import PerformanceTestModel, MetricsTestModel, PushLogModel, AlertsModel
 from base import ProjectBatchCommand
 
 from datazilla.controller.admin.metrics.perftest_metrics import compute_test_run_metrics
@@ -40,7 +40,6 @@ class Command(ProjectBatchCommand):
 
         )
 
-
     def handle_project(self, project, **options):
 
         self.stdout.write("Processing project {0}\n".format(project))
@@ -49,10 +48,11 @@ class Command(ProjectBatchCommand):
         loadlimit = int(options.get("loadlimit", 1))
         debug = options.get("debug", None)
 
-        test_run_ids = []
-        ptm = PerformanceTestModel(project)
-        test_run_ids = ptm.process_objects(loadlimit)
-        ptm.disconnect()
+        test_run_ids = [115855]
+        #test_run_ids = []
+        #ptm = PerformanceTestModel(project)
+        #test_run_ids = ptm.process_objects(loadlimit)
+        #ptm.disconnect()
 
         """
         metrics_exclude_projects = set(['b2g', 'games', 'jetperf', 'marketapps', 'microperf', 'stoneridge', 'test', 'webpagetest'])
@@ -65,25 +65,38 @@ class Command(ProjectBatchCommand):
                 )
         """
 
-        mtm = MetricsTestModel(project)
-        revisions_without_push_data = mtm.load_test_data_all_dimensions(
-            test_run_ids)
+        #If we don't have test_run_ids at this point don't bother
+        #creating anymore database connections
+        if test_run_ids:
 
-        if revisions_without_push_data:
+            """
+            mtm = MetricsTestModel(project)
+            revisions_without_push_data = mtm.load_test_data_all_dimensions(
+                test_run_ids)
 
-            revision_nodes = {}
-            plm = PushLogModel(pushlog_project)
+            #Mark up any revisions that do not have push data associated
+            if revisions_without_push_data:
 
-            for revision in revisions_without_push_data:
+                revision_nodes = {}
+                plm = PushLogModel(pushlog_project)
 
-                node = plm.get_node_from_revision(
-                    revision, revisions_without_push_data[revision])
+                for revision in revisions_without_push_data:
 
-                revision_nodes[revision] = node
+                    node = plm.get_node_from_revision(
+                        revision, revisions_without_push_data[revision])
 
-            plm.disconnect()
-            mtm.set_push_data_all_dimensions(revision_nodes)
+                    revision_nodes[revision] = node
 
-        mtm.disconnect()
+                plm.disconnect()
+                mtm.set_push_data_all_dimensions(revision_nodes)
 
+            mtm.disconnect()
+            """
+            #Generate the summary and store any alerts
+            am = AlertsModel(project)
+
+            am.mark_summary_ready(test_run_ids)
+            am.process_summary(test_run_ids)
+
+            am.disconnect()
 

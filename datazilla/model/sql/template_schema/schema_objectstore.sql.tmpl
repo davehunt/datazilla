@@ -16,7 +16,7 @@ CREATE TABLE `objectstore` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `test_run_id` int(11) NULL,
   `date_loaded` int(11) NOT NULL,
-  `processed_flag` enum('ready','loading','complete') DEFAULT 'ready',
+  `processed_flag` enum('ready','loading','complete', 'summary_ready', 'summary_loading', 'summary_complete') DEFAULT 'ready',
   `error_flag` enum('N','Y') DEFAULT 'N',
   `error_msg` mediumtext,
   `json_blob` mediumblob,

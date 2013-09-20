@@ -1239,6 +1239,72 @@
 
              "host":"read_host"
       }
-   }
+   },
+
+   "alerts": {
+
+        "selects": {
+            "get_all_dimensions_ref_data":{
+
+                "sql":"SELECT product_id,
+                              operating_system_id,
+                              test_id,
+                              page_id,
+                              branch,
+                              branch_version,
+                              processor,
+                              build_type
+                        FROM test_data_all_dimensions
+                        WHERE test_run_id IN (REP0)
+                        GROUP BY product_id,
+                                 operating_system_id,
+                                 test_id,
+                                 page_id,
+                                 branch,
+                                 branch_version,
+                                 processor,
+                                 build_type",
+
+                "host":"master_host"
+            },
+
+            "get_all_dimensions_datum_set": {
+
+                "sql":"SELECT product_id,
+                              operating_system_id,
+                              test_id,
+                              test_name,
+                              product,
+                              branch,
+                              branch_version,
+                              revision,
+                              operating_system_name,
+                              operating_system_version,
+                              processor,
+                              machine_name,
+                              page_id,
+                              page_url,
+                              test_run_id,
+                              coalesce(push_date, date_received) AS push_date,
+                              n_replicates,
+                              mean,
+                              std
+                        FROM test_data_all_dimensions AS td
+                        WHERE n_replicates IS NOT NULL AND
+                              td.product_id = ? AND
+                              td.operating_system_id = ? AND
+                              td.test_id = ? AND
+                              td.page_id = ? AND
+                              td.branch = ? AND
+                              td.branch_version = ? AND
+                              td.processor = ? AND
+                              td.build_type = ?
+                        ORDER BY coalesce(push_date, date_received)
+                        LIMIT ?",
+
+                "host":"master_host"
+            }
+        }
+    }
 }
 
