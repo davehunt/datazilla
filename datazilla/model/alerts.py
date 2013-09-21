@@ -17,7 +17,6 @@ class AlertsModel(DatazillaModelBase):
     Public interface to all alert relevant data in the schema.
     """
 
-    # content types that every project will have
     CONTENT_TYPES = ["perftest", "objectstore"]
 
     SEVERITY = 0.6 #There are many false positives
@@ -111,10 +110,11 @@ class AlertsModel(DatazillaModelBase):
 
         #REMOVE
         #test_run_ids = [183666, 183646, 183630, 183590, 183568, 183550, 183515, 183439, 183366, 183352, 183256, 100187, 99900, 99887, 94626 ]
-        test_run_ids = [183666, 183646]
+        #test_run_ids = [183666, 183646]
+        test_run_ids = [183646]
         test_run_id_set = set(test_run_ids)
 
-        #Retrieve reference ids associated with these test_run_ids
+        #Retrieve reference data associated with these test_run_ids
         proc = "perftest.alerts.selects.get_all_dimensions_ref_data"
 
         ref_data = self.sources["perftest"].dhub.execute(
@@ -128,10 +128,10 @@ class AlertsModel(DatazillaModelBase):
         for ref_datum in ref_data:
 
             placeholders = [
-                int(ref_datum['product_id']),
-                int(ref_datum['operating_system_id']),
-                int(ref_datum['test_id']),
-                int(ref_datum['page_id']),
+                ref_datum['product_id'],
+                ref_datum['operating_system_id'],
+                ref_datum['test_id'],
+                ref_datum['page_id'],
                 ref_datum['branch'],
                 ref_datum['branch_version'],
                 ref_datum['processor'],
@@ -139,6 +139,9 @@ class AlertsModel(DatazillaModelBase):
                 self.datumLimit
                 ]
 
+            #For each unique set of reference data retrieve the last
+            #self.datumLimit of datapoints. Order by
+            #coalesce(push_date, date_received)
             datum_set = self.sources["perftest"].dhub.execute(
                 proc="perftest.alerts.selects.get_all_dimensions_datum_set",
                 placeholders=placeholders,
@@ -148,9 +151,15 @@ class AlertsModel(DatazillaModelBase):
             self.process_datum_set(
                 datum_set, summary_collection, test_run_id_set)
 
+        #Compute percentages and number of total objects in
+        #summary structures
+        summary_collection.compute()
+
+        #REMOVE THIS LINE, for testing only
+        summary_collection.print_summaries()
+
     def process_datum_set(
         self, datum_set, summary_collection, test_run_id_set):
-
         """
                 datum_set = [
                     {
@@ -176,87 +185,57 @@ class AlertsModel(DatazillaModelBase):
                     ...
                     ]
         """
-        grouped_data = self.group_by_page_url(datum_set)
+        #use zmoment_total for total rolling stats accumulation
+        zmoment_total = Z_moment()
+        total_values = len(datum_set)
 
-        for page_url in grouped_data:
+        for count, v in enumerate(datum_set):
+            print v['page_url']
+            #The inter-test variance is significant and can
+            #not be explained. We simply consider test series
+            #a single sample.
+            s = Stats(count=1, mean=v['mean'], biased=True)
 
-            #use zmoment_total for total rolling stats accumulation
-            zmoment_total = Z_moment()
+            if v['test_run_id'] in test_run_id_set:
+                t = z_moment2stats(zmoment_total, unbiased=False)
 
-            values = grouped_data[page_url]
-            total_values = len(values)
-
-            for count, v in enumerate(values):
-
-                #The inter-test variance is significant and can
-                #not be explained. We simply consider test series
-                #a single sample.
-                s = Stats(
-                    count=1,
-                    mean=v['mean'],
-                    biased=True
+                #Assume uniform distribution if variance is too small
+                confidence, diff = single_ttest(
+                    s.mean, t, min_variance=1.0/12.0
                     )
 
-                if v['test_run_id'] in test_run_id_set:
+                if AlertsModel.MIN_CONFIDENCE < confidence and diff > 0:
 
-                    t = z_moment2stats(zmoment_total, unbiased=False)
-                    #Assume uniform distribution if variance is too small
-                    confidence, diff = single_ttest(
-                        s.mean, t, min_variance=1.0/12.0
-                        )
+                    #Just setting placeholders here until the correct
+                    #computations are determined
+                    v['test_evaluation'] = 0
+                    v['h0_rejected'] = 1
+                    v['pass'] = 0
+                    v['fail'] = 1
 
-                    if AlertsModel.MIN_CONFIDENCE < confidence and diff > 0:
+                else:
+                    #Just setting placeholders here until the correct
+                    #computations are determined
+                    v['test_evaluation'] = 1
+                    v['h0_rejected'] = 0
+                    v['pass'] = 1
+                    v['fail'] = 0
 
-                        #confirm that this is our target datum
-                        print "TARGET DATUM ALERT"
-                        print v
+                summary_collection.add(v)
 
-                        v['test_evaluation'] = 0
-                        v['h0_rejected'] = 1
-                        v['pass'] = 0
-                        v['fail'] = 1
+                summary_collection.print_summaries()
 
-                    else:
+            zmoment = stats2z_moment(s, self.DEBUG)
 
-                        v['test_evaluation'] = 1
-                        v['h0_rejected'] = 0
-                        v['pass'] = 1
-                        v['fail'] = 0
+            #Add a zmoment attribute to each value dict
+            datum_set[count - 1]['zmoment'] = zmoment
+            #Calculate cumulative zmoment
+            zmoment_total = zmoment_total + zmoment
 
-                    summary_collection.add(v)
-
-                    summary_collection.print_summaries()
-
-                zmoment = stats2z_moment(s, self.DEBUG)
-
-                #Add a zmoment attribute to each value dict
-                values[count - 1]['zmoment'] = zmoment
-                #Calculate cumulative zmoment
-                zmoment_total = zmoment_total + zmoment
-
-                if count >= AlertsModel.WINDOW_SIZE:
-                    #Limit window in zmoment_total according to WINDOW_SIZE
-                    values_index = count - AlertsModel.WINDOW_SIZE
-                    zmoment_total = zmoment_total - values[values_index]['zmoment']
-
-    def group_by_page_url(self, data):
-
-        grouped_data = {}
-
-        for items in data:
-
-            key = items['page_url']
-
-            if key not in grouped_data:
-                grouped_data[key] = []
-
-            grouped_data[ key ].append(items)
-
-        return grouped_data
-
-    def get_key(self, keys):
-
-        return '|'.join(keys)
+            if count >= AlertsModel.WINDOW_SIZE:
+                #Limit window in zmoment_total according to WINDOW_SIZE
+                ds_index = count - AlertsModel.WINDOW_SIZE
+                zmoment_total = zmoment_total - datum_set[ds_index]['zmoment']
 
 class SummaryCollection():
 
@@ -276,6 +255,11 @@ class SummaryCollection():
             self.summaries[ product_id ][ revision ] = RevisionSummary()
 
         self.summaries[ product_id ][ revision ].add(datum)
+
+    def compute(self):
+        for product_id in self.summaries:
+            for revision in self.summaries[product_id]:
+                self.summaries[product_id][revision].compute()
 
     def print_summaries(self):
         for product_id in self.summaries:
@@ -338,6 +322,40 @@ class RevisionSummary():
 
         self.data['tests_vs_platforms'][test_name][platform]['total_pass'] += datum['pass']
         self.data['tests_vs_platforms'][test_name][platform]['total_fail'] += datum['fail']
+
+    def compute(self):
+
+        #Total number of objects is equal to the number of test run ids
+        self._set_total_objects(self.data)
+        self._set_percentage(self.data)
+
+        for key_one in ['platforms', 'tests']:
+            for key_two in self.data[key_one]:
+
+                self._set_percentage(self.data[key_one][key_two])
+                self._set_total_objects(self.data[key_one][key_two])
+
+        for test_name in self.data['tests_vs_platforms']:
+            for platform in self.data['tests_vs_platforms'][test_name]:
+                self._set_percentage(self.data['tests_vs_platforms'][test_name][platform])
+
+    def merge(self):
+        pass
+
+    def _set_percentage(self, data):
+
+        total = data['total_pass'] + data['total_fail']
+
+        percentage = 0.00
+        if total > 0:
+            percentage = round( (float(data['total_pass'])/float(total))*100.00 )
+
+        data['percent_pass'] = percentage
+
+    def _set_total_objects(self, data):
+
+        #Total number of objects is equal to the number of test run ids
+        data['total_objects'] = len( data['test_run_ids'].keys() )
 
     def init_summary(self, datum, test_name, platform, page_url):
 
