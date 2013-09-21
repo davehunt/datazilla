@@ -115,8 +115,6 @@ class AlertsModel(DatazillaModelBase):
         test_run_id_set = set(test_run_ids)
 
         #Retrieve reference data associated with these test_run_ids
-        proc = "perftest.alerts.selects.get_all_dimensions_ref_data"
-
         ref_data = self.sources["perftest"].dhub.execute(
             proc="perftest.alerts.selects.get_all_dimensions_ref_data",
             replace=[test_run_ids],
